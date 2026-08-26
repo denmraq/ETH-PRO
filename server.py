@@ -11,7 +11,7 @@ from push_service import public_key, configured as push_configured, send_all
 from state_store import init_db, save_subscription, kv_get, kv_set
 from signal_priority import build_priority_state, priority_change, MIN_PRIORITY_GAP
 
-app=FastAPI(title='ETH Entry Radar PRO V1.2')
+app=FastAPI(title='ETH Entry Radar PRO V1.3')
 BASE=Path(__file__).parent; STATIC=BASE/'static'; app.mount('/static',StaticFiles(directory=STATIC),name='static')
 
 @app.middleware('http')
@@ -28,7 +28,7 @@ def manifest(): return FileResponse(STATIC/'manifest.webmanifest',media_type='ap
 @app.get('/service-worker.js')
 def sw(): return FileResponse(STATIC/'service-worker.js',media_type='application/javascript',headers={'Cache-Control':'no-cache'})
 @app.get('/api/health')
-def health(): return {'ok':True,'version':'pro-1.2','push':push_configured(),'priority_gap':MIN_PRIORITY_GAP}
+def health(): return {'ok':True,'version':'pro-1.3','push':push_configured(),'priority_gap':MIN_PRIORITY_GAP}
 @app.get('/api/radar')
 def radar(): return analyze().to_dict()
 @app.get('/api/news')

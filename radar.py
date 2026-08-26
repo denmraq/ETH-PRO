@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 
 BASE_URL = "https://api.bybit.com"
+BINANCE_URL = "https://fapi.binance.com"
 SYMBOL = "ETHUSDT"
 CATEGORY = "linear"
 TIMEOUT = 12
@@ -47,19 +48,31 @@ def _get(path: str, params=None):
         raise RuntimeError(f"Bybit API error {data.get('retCode')}: {data.get('retMsg')}")
     return data
 
+def _binance_get(path: str, params=None):
+    r = SESSION.get(BINANCE_URL + path, params=params or {}, timeout=TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
 def klines(interval: str, limit: int = 300, closed_only: bool = True) -> pd.DataFrame:
     bybit_interval = _BYBIT_INTERVALS.get(interval)
     if not bybit_interval:
         raise ValueError(f"Unsupported interval: {interval}")
-    data = _get("/v5/market/kline", {
-        "category": CATEGORY,
-        "symbol": SYMBOL,
-        "interval": bybit_interval,
-        "limit": min(int(limit), 1000),
-    })
-    raw = data.get("result", {}).get("list", [])
-    cols = ["open_time","open","high","low","close","volume","quote_volume"]
-    df = pd.DataFrame(raw, columns=cols)
+    try:
+        data = _get("/v5/market/kline", {
+            "category": CATEGORY, "symbol": SYMBOL, "interval": bybit_interval,
+            "limit": min(int(limit), 1000),
+        })
+        raw = data.get("result", {}).get("list", [])
+        cols = ["open_time","open","high","low","close","volume","quote_volume"]
+        df = pd.DataFrame(raw, columns=cols)
+    except Exception:
+        # Render egress can receive 403 from Bybit. Binance Futures is the live fallback.
+        raw = _binance_get("/fapi/v1/klines", {"symbol": SYMBOL, "interval": interval, "limit": min(int(limit), 1500)})
+        cols13=["open_time","open","high","low","close","volume","close_time_raw","quote_volume","trades","taker_buy_base","taker_buy_quote","ignore","extra"]
+        df=pd.DataFrame(raw, columns=cols13[:len(raw[0])] if raw else cols13[:12])
+        if len(df):
+            keep=["open_time","open","high","low","close","volume","quote_volume"]
+            df=df[keep].copy()
     if not len(df):
         return pd.DataFrame(columns=["open_time","open","high","low","close","volume","close_time",
                                      "quote_volume","trades","taker_buy_base","taker_buy_quote","ignore"])
@@ -68,22 +81,22 @@ def klines(interval: str, limit: int = 300, closed_only: bool = True) -> pd.Data
     df["open_time"] = pd.to_datetime(pd.to_numeric(df["open_time"]), unit="ms", utc=True)
     df = df.sort_values("open_time").reset_index(drop=True)
     df["close_time"] = df["open_time"] + pd.to_timedelta(_INTERVAL_MS[interval], unit="ms")
-    # Compatibility columns retained from the old Binance schema.
-    df["trades"] = np.nan
-    df["taker_buy_base"] = np.nan
-    df["taker_buy_quote"] = np.nan
-    df["ignore"] = np.nan
+    for c in ["trades","taker_buy_base","taker_buy_quote","ignore"]:
+        if c not in df: df[c]=np.nan
     if closed_only:
         now = pd.Timestamp.now(tz="UTC")
         df = df[df["close_time"] <= now].copy()
     return df.reset_index(drop=True)
 
 def live_price() -> float:
-    data = _get("/v5/market/tickers", {"category": CATEGORY, "symbol": SYMBOL})
-    rows = data.get("result", {}).get("list", [])
-    if not rows:
-        raise RuntimeError("Bybit ticker returned no data")
-    return float(rows[0]["lastPrice"])
+    try:
+        data = _get("/v5/market/tickers", {"category": CATEGORY, "symbol": SYMBOL})
+        rows = data.get("result", {}).get("list", [])
+        if rows: return float(rows[0]["lastPrice"])
+    except Exception:
+        pass
+    data=_binance_get("/fapi/v1/ticker/price", {"symbol":SYMBOL})
+    return float(data["price"])
 
 def indicators(df: pd.DataFrame) -> pd.DataFrame:
     x = df.copy()
@@ -111,46 +124,58 @@ def indicators(df: pd.DataFrame) -> pd.DataFrame:
 
 def open_interest_hist(period="5m", limit=30):
     interval_time = _OI_INTERVALS.get(period, "5min")
-    data = _get("/v5/market/open-interest", {
-        "category": CATEGORY,
-        "symbol": SYMBOL,
-        "intervalTime": interval_time,
-        "limit": min(int(limit), 200),
-    })
-    raw = data.get("result", {}).get("list", [])
-    df = pd.DataFrame(raw)
+    try:
+        data = _get("/v5/market/open-interest", {"category": CATEGORY,"symbol": SYMBOL,"intervalTime": interval_time,"limit": min(int(limit), 200)})
+        raw = data.get("result", {}).get("list", [])
+        df = pd.DataFrame(raw)
+        if len(df):
+            df["sumOpenInterest"] = pd.to_numeric(df["openInterest"], errors="coerce")
+            df["timestamp"] = pd.to_datetime(pd.to_numeric(df["timestamp"]), unit="ms", utc=True)
+            return df.sort_values("timestamp").reset_index(drop=True)
+    except Exception:
+        pass
+    period_map={"5m":"5m","15m":"15m","30m":"30m","1h":"1h","4h":"4h","1d":"1d"}
+    raw=_binance_get("/futures/data/openInterestHist", {"symbol":SYMBOL,"period":period_map.get(period,"5m"),"limit":min(int(limit),500)})
+    df=pd.DataFrame(raw)
     if len(df):
-        df["sumOpenInterest"] = pd.to_numeric(df["openInterest"], errors="coerce")
-        df["timestamp"] = pd.to_datetime(pd.to_numeric(df["timestamp"]), unit="ms", utc=True)
-        df = df.sort_values("timestamp").reset_index(drop=True)
+        df["sumOpenInterest"]=pd.to_numeric(df["sumOpenInterest"],errors="coerce")
+        df["timestamp"]=pd.to_datetime(pd.to_numeric(df["timestamp"]),unit="ms",utc=True)
+        df=df.sort_values("timestamp").reset_index(drop=True)
     return df
 
 def premium_index():
-    # Keep the old function contract: caller expects lastFundingRate as a decimal.
-    data = _get("/v5/market/funding/history", {
-        "category": CATEGORY,
-        "symbol": SYMBOL,
-        "limit": 1,
-    })
-    rows = data.get("result", {}).get("list", [])
-    return {"lastFundingRate": rows[0].get("fundingRate", "0") if rows else "0"}
+    try:
+        data = _get("/v5/market/funding/history", {"category": CATEGORY,"symbol": SYMBOL,"limit": 1})
+        rows = data.get("result", {}).get("list", [])
+        if rows: return {"lastFundingRate": rows[0].get("fundingRate", "0")}
+    except Exception:
+        pass
+    data=_binance_get("/fapi/v1/premiumIndex", {"symbol":SYMBOL})
+    return {"lastFundingRate": data.get("lastFundingRate","0")}
 
 def agg_trades(limit=1000):
-    data = _get("/v5/market/recent-trade", {
-        "category": CATEGORY,
-        "symbol": SYMBOL,
-        "limit": min(int(limit), 1000),
-    })
-    raw = data.get("result", {}).get("list", [])
-    df = pd.DataFrame(raw)
+    try:
+        data = _get("/v5/market/recent-trade", {"category": CATEGORY,"symbol": SYMBOL,"limit": min(int(limit), 1000)})
+        raw = data.get("result", {}).get("list", [])
+        df = pd.DataFrame(raw)
+        if len(df):
+            df["p"] = pd.to_numeric(df["price"], errors="coerce")
+            df["q"] = pd.to_numeric(df["size"], errors="coerce")
+            df["T"] = pd.to_datetime(pd.to_numeric(df["time"]), unit="ms", utc=True)
+            df["signed_quote"] = np.where(df["side"].astype(str).str.lower().eq("buy"), df["p"]*df["q"], -df["p"]*df["q"])
+            return df.sort_values("T").reset_index(drop=True)
+    except Exception:
+        pass
+    raw=_binance_get("/fapi/v1/aggTrades", {"symbol":SYMBOL,"limit":min(int(limit),1000)})
+    df=pd.DataFrame(raw)
     if len(df):
-        df["p"] = pd.to_numeric(df["price"], errors="coerce")
-        df["q"] = pd.to_numeric(df["size"], errors="coerce")
-        df["T"] = pd.to_datetime(pd.to_numeric(df["time"]), unit="ms", utc=True)
-        # Bybit side is the taker's/aggressor's side: Buy = aggressive buy, Sell = aggressive sell.
-        df["signed_quote"] = np.where(df["side"].astype(str).str.lower().eq("buy"),
-                                      df["p"] * df["q"], -df["p"] * df["q"])
-        df = df.sort_values("T").reset_index(drop=True)
+        df["p"]=pd.to_numeric(df["p"],errors="coerce"); df["q"]=pd.to_numeric(df["q"],errors="coerce")
+        df["T"]=pd.to_datetime(pd.to_numeric(df["T"]),unit="ms",utc=True)
+        # Binance m=True means buyer is maker -> aggressor is SELL.
+        df["side"]=np.where(df["m"].astype(bool),"Sell","Buy")
+        df["signed_quote"]=np.where(df["m"].astype(bool),-(df["p"]*df["q"]),(df["p"]*df["q"]))
+        df["execId"]=df.get("a",pd.Series(range(len(df)))).astype(str)
+        df=df.sort_values("T").reset_index(drop=True)
     return df
 
 # Persistent multi-window Flow. The background monitor keeps this populated even

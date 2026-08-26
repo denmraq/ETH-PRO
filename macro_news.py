@@ -65,9 +65,14 @@ def classify(text: str):
     return impact,semantic
 
 def _ticker(symbol):
-    r=requests.get('https://api.bybit.com/v5/market/tickers',params={'category':'linear','symbol':symbol},headers=UA,timeout=TIMEOUT)
-    r.raise_for_status(); rows=r.json().get('result',{}).get('list',[])
-    return float(rows[0]['lastPrice']) if rows else None
+    try:
+        r=requests.get('https://api.bybit.com/v5/market/tickers',params={'category':'linear','symbol':symbol},headers=UA,timeout=TIMEOUT)
+        r.raise_for_status(); rows=r.json().get('result',{}).get('list',[])
+        if rows: return float(rows[0]['lastPrice'])
+    except Exception:
+        pass
+    r=requests.get('https://fapi.binance.com/fapi/v1/ticker/price',params={'symbol':symbol},headers=UA,timeout=TIMEOUT)
+    r.raise_for_status(); return float(r.json()['price'])
 
 def ingest():
     now=time.time(); created=[]

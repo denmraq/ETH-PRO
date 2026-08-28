@@ -1,13 +1,19 @@
 # ETH-PRO
 
-Полная версия для Render.
+Полный минимальный комплект для Render.
 
-Причина перехода с Binance на OKX:
-Render получает HTTP 451 от Binance Futures API. Это блокировка по локации/IP дата-центра, а не ошибка Python.
+Render сейчас настроен на Docker, поэтому Dockerfile ОБЯЗАТЕЛЕН.
 
-Логика прогноза сохранена:
-- 1H: microstructure / taker buy-sell imbalance
-- 12H: CatBoost, признаки returns + volatility + volume_change + funding_rate
-- 24H: EMA trend + funding bias
+Структура:
+- Dockerfile
+- .dockerignore
+- render.yaml
+- Procfile
+- requirements.txt
+- server.py
+- train_model.py
+- start.sh
+- static/index.html
 
-Модель CatBoost обучается в фоне после запуска сервера, поэтому health check Render не блокируется.
+При первом запуске start.sh пытается обучить CatBoost-модель.
+Если обучение не удаётся, сервер всё равно запускается, а 12H временно показывает fallback 50%.

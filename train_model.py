@@ -1,119 +1,131 @@
 import time
-from pathlib import Path
 import requests
-import numpy as np
 import pandas as pd
-import joblib
-from lightgbm import LGBMClassifier
-from sklearn.metrics import accuracy_score, brier_score_loss
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.model_selection import TimeSeriesSplit
-from ml.features import build_features, binary_target, future_return, FEATURE_COLUMNS
+from catboost import CatBoostClassifier
 
-OKX = "https://www.okx.com"
-INST = "ETH-USDT-SWAP"
-MODEL_PATH = "ml/eth_direction_lgbm.joblib"
-REPORT_PATH = "ml/walk_forward_report.json"
+BINANCE_URL = "https://fapi.binance.com"
+SYMBOL = "ETHUSDT"
+MODEL_PATH = "catboost_eth_model.cbm"
 
-def okx_get(path, params=None):
-    r = requests.get(f"{OKX}{path}", params=params or {}, timeout=20,
-                     headers={"User-Agent":"ETH-RADAR/2.0"})
+def get(path, params):
+    r = requests.get(f"{BINANCE_URL}{path}", params=params, timeout=30)
     r.raise_for_status()
-    p = r.json()
-    if p.get("code") != "0":
-        raise RuntimeError(p.get("msg") or str(p))
-    return p.get("data", [])
+    return r.json()
 
-def history_1h(target_bars=9000):
-    rows, after = [], None
-    while len(rows) < target_bars:
-        params = {"instId": INST, "bar": "1H", "limit": "100"}
-        if after:
-            params["after"] = after
-        chunk = okx_get("/api/v5/market/history-candles", params)
-        if not chunk:
+def fetch_1h_history(total=17520):
+    rows = []
+    end_time = None
+
+    while len(rows) < total:
+        limit = min(1500, total - len(rows))
+        params = {"symbol": SYMBOL, "interval": "1h", "limit": limit}
+        if end_time is not None:
+            params["endTime"] = end_time
+
+        batch = get("/fapi/v1/klines", params)
+        if not batch:
             break
-        rows.extend(chunk)
-        after = chunk[-1][0]
-        time.sleep(0.08)
-        if len(chunk) < 100:
+
+        rows = batch + rows
+        end_time = int(batch[0][0]) - 1
+        print(f"Candles: {len(rows)}")
+        time.sleep(0.10)
+
+        if len(batch) < limit:
             break
-    cols = ["t","o","h","l","c","v","vol_ccy","qav","confirm"]
-    df = pd.DataFrame(rows, columns=cols).drop_duplicates("t")
-    for c in ["t","o","h","l","c","v","qav","confirm"]:
+
+    cols = [
+        "time","open","high","low","close","volume",
+        "close_time","qav","num_trades",
+        "taker_base_vol","taker_quote_vol","ignore"
+    ]
+    df = pd.DataFrame(rows, columns=cols)
+    for c in ["time","open","high","low","close","volume"]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
-    df = df.sort_values("t").reset_index(drop=True)
-    return df[df["confirm"] == 1].copy()
+    return df.drop_duplicates("time").sort_values("time").reset_index(drop=True)
 
-def train_model():
-    df = history_1h()
-    X = build_features(df, funding_rate=0.0)
-    y = binary_target(df, 12)
-    ret = future_return(df, 12)
+def fetch_funding(start_time, end_time):
+    rows = []
+    cursor = int(start_time)
 
-    data = X.copy()
-    data["target"] = y
-    data["future_return"] = ret
-    data = data.dropna().reset_index(drop=True)
-
-    X = data[FEATURE_COLUMNS]
-    y = data["target"].astype(int)
-
-    splitter = TimeSeriesSplit(n_splits=6, gap=12)
-    fold_results = []
-    oof_p, oof_y = [], []
-
-    for fold, (tr, va) in enumerate(splitter.split(X), 1):
-        model = LGBMClassifier(
-            n_estimators=500,
-            learning_rate=0.025,
-            num_leaves=24,
-            max_depth=-1,
-            subsample=0.85,
-            colsample_bytree=0.85,
-            random_state=42,
-        )
-        model.fit(X.iloc[tr], y.iloc[tr])
-        p = model.predict_proba(X.iloc[va])[:,1]
-        pred = (p > 0.5).astype(int)
-        fold_results.append({
-            "fold": fold,
-            "accuracy": float(accuracy_score(y.iloc[va], pred)),
-            "brier": float(brier_score_loss(y.iloc[va], p)),
-            "n": int(len(va)),
+    while cursor < end_time:
+        batch = get("/fapi/v1/fundingRate", {
+            "symbol": SYMBOL,
+            "startTime": cursor,
+            "endTime": int(end_time),
+            "limit": 1000,
         })
-        oof_p.extend(p.tolist())
-        oof_y.extend(y.iloc[va].tolist())
+        if not batch:
+            break
 
-    base_model = LGBMClassifier(
-        n_estimators=650,
-        learning_rate=0.02,
-        num_leaves=24,
-        subsample=0.9,
-        colsample_bytree=0.9,
-        random_state=42,
+        rows.extend(batch)
+        last = int(batch[-1]["fundingTime"])
+        if last <= cursor:
+            break
+        cursor = last + 1
+        print(f"Funding rows: {len(rows)}")
+        time.sleep(0.10)
+
+        if len(batch) < 1000:
+            break
+
+    f = pd.DataFrame(rows)
+    if f.empty:
+        return pd.DataFrame(columns=["fundingTime","funding_rate"])
+
+    f["fundingTime"] = pd.to_numeric(f["fundingTime"], errors="coerce")
+    f["funding_rate"] = pd.to_numeric(f["fundingRate"], errors="coerce")
+    return (
+        f[["fundingTime","funding_rate"]]
+        .drop_duplicates("fundingTime")
+        .sort_values("fundingTime")
     )
-    # Time-series split logic above is kept for validation.
-    # Final probabilities are calibrated to make 60/70/80% more meaningful.
-    cut = max(300, int(len(X) * 0.82))
-    base_model.fit(X.iloc[:cut], y.iloc[:cut])
-    calibrated = CalibratedClassifierCV(base_model, method="sigmoid", cv="prefit")
-    calibrated.fit(X.iloc[cut:], y.iloc[cut:])
-    final_model = calibrated
-    Path("ml").mkdir(exist_ok=True)
-    joblib.dump(final_model, MODEL_PATH)
 
-    report = {
-        "rows": int(len(X)),
-        "folds": fold_results,
-        "overall_accuracy": float(accuracy_score(oof_y, (np.array(oof_p)>0.5).astype(int))),
-        "overall_brier": float(brier_score_loss(oof_y, oof_p)),
-        "target": "Price(t+12h) > Price(t)",
-    }
-    import json
-    Path(REPORT_PATH).write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(report)
-    return report
+def main():
+    df = fetch_1h_history()
+    funding = fetch_funding(df["time"].iloc[0], df["time"].iloc[-1])
+
+    df = pd.merge_asof(
+        df.sort_values("time"),
+        funding.sort_values("fundingTime"),
+        left_on="time",
+        right_on="fundingTime",
+        direction="backward",
+    )
+    df["funding_rate"] = df["funding_rate"].fillna(0.0)
+
+    # Gemini feature logic
+    df["returns"] = df["close"].pct_change()
+    df["volatility"] = df["returns"].rolling(12).std()
+    df["volume_change"] = df["volume"].pct_change()
+
+    # Gemini 12h target: > +1.5% after 12 hours
+    future_return = df["close"].shift(-12) / df["close"] - 1
+    df["target"] = (future_return > 0.015).astype(int)
+
+    df = df.iloc[:-12].dropna().reset_index(drop=True)
+
+    features = ["returns","volatility","volume_change","funding_rate"]
+    X = df[features]
+    y = df["target"]
+
+    if y.nunique() < 2:
+        raise RuntimeError("Training target has only one class")
+
+    print(f"Training rows: {len(df)}")
+    print(f"Positive class: {y.mean():.4f}")
+
+    model = CatBoostClassifier(
+        iterations=500,
+        depth=6,
+        learning_rate=0.03,
+        loss_function="Logloss",
+        random_seed=42,
+        verbose=100,
+    )
+    model.fit(X, y)
+    model.save_model(MODEL_PATH)
+    print(f"Saved: {MODEL_PATH}")
 
 if __name__ == "__main__":
-    train_model()
+    main()

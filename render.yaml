@@ -1,7 +1,0 @@
-services:
-  - type: web
-    name: eth-pro
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    autoDeploy: true
-    healthCheckPath: /api/health

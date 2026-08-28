@@ -63,6 +63,32 @@
             color: #64748b;
             margin-top: 8px;
         }
+        .news-summary {
+            font-size: 0.9rem;
+            color: #cbd5e1;
+            margin-bottom: 12px;
+            line-height: 1.45;
+        }
+        .news-item {
+            padding: 11px 0;
+            border-top: 1px solid #24334a;
+        }
+        .news-title {
+            color: #e2e8f0;
+            font-size: 0.9rem;
+            line-height: 1.35;
+            text-decoration: none;
+            font-weight: 650;
+        }
+        .news-meta {
+            margin-top: 5px;
+            color: #64748b;
+            font-size: 0.76rem;
+        }
+        .BULLISH { color: #22c55e; }
+        .BEARISH { color: #ef4444; }
+        .NEUTRAL { color: #f59e0b; }
+
         button {
             width: 100%;
             background: #0284c7;
@@ -81,7 +107,14 @@
         <h1>ETH RADAR: LONG / SHORT</h1>
         <div id="status" class="status">Проверка модели...</div>
         <div id="content">Получение сигналов...</div>
-        <button onclick="loadPredictions()">Обновить Радар</button>
+
+        <div class="card news-card">
+            <div class="horizon-title">ETH NEWS ENGINE</div>
+            <div id="news-summary" class="news-summary">Получение свежих новостей...</div>
+            <div id="news-list"></div>
+        </div>
+
+        <button onclick="refreshAll()">Обновить Радар</button>
     </div>
 
     <script>
@@ -138,7 +171,58 @@
             }
         }
 
-        loadPredictions();
+        async function loadNews() {
+            const summary = document.getElementById('news-summary');
+            const list = document.getElementById('news-list');
+
+            try {
+                const res = await fetch('/api/v1/news', { cache: 'no-store' });
+                const data = await res.json();
+
+                if (data.status !== 'ok') {
+                    summary.textContent = `Новости временно недоступны: ${data.message}`;
+                    list.innerHTML = '';
+                    return;
+                }
+
+                summary.innerHTML =
+                    `Фон: <b class="${data.overall}">${data.overall}</b> · ` +
+                    `🟢 ${data.bullish} · 🔴 ${data.bearish} · 🟡 ${data.neutral}`;
+
+                list.innerHTML = data.articles.map(n => {
+                    let dt = '';
+                    if (n.published) {
+                        try {
+                            dt = new Date(n.published).toLocaleString('ru-RU', {
+                                day: '2-digit', month: '2-digit',
+                                hour: '2-digit', minute: '2-digit'
+                            });
+                        } catch(e) {}
+                    }
+
+                    const safeLink = n.link || '#';
+                    return `
+                        <div class="news-item">
+                            <a class="news-title" href="${safeLink}" target="_blank" rel="noopener noreferrer">${n.title}</a>
+                            <div class="news-meta">
+                                <span class="${n.sentiment}">${n.sentiment}</span>
+                                · влияние ${n.impact}% ${dt ? '· ' + dt : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (e) {
+                summary.textContent = 'Новости временно недоступны';
+                list.innerHTML = '';
+            }
+        }
+
+        async function refreshAll() {
+            await Promise.all([loadPredictions(), loadNews()]);
+        }
+
+        refreshAll();
     </script>
 </body>
 </html>

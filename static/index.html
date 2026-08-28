@@ -1,36 +1,40 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0f172a">
-<title>ETH ML Market Radar</title>
+<title>ETH ML Radar</title>
 <style>
-*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f172a;color:#f8fafc;margin:0;padding:20px;display:flex;justify-content:center}.container{max-width:520px;width:100%}h1{text-align:center;color:#38bdf8;font-size:1.55rem;margin:8px 0 8px}.sub{text-align:center;color:#94a3b8;font-size:.82rem;margin-bottom:16px}.card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:16px;margin-bottom:12px}.title{font-weight:700;color:#94a3b8;font-size:.85rem;text-transform:uppercase;margin-bottom:8px}.value{font-size:1.5rem;font-weight:800}.LONG{color:#4ade80}.SHORT{color:#f87171}.NEUTRAL{color:#fbbf24}.details{font-size:.9rem;color:#cbd5e1;margin-top:6px;line-height:1.45}.model{text-align:center;font-size:.82rem;color:#94a3b8;margin:0 0 12px}button{width:100%;border:0;border-radius:10px;padding:14px;background:#0284c7;color:white;font-size:1rem;font-weight:800}.error{color:#fecaca}
+*{box-sizing:border-box}body{margin:0;padding:20px;background:#0f172a;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;display:flex;justify-content:center}.wrap{width:100%;max-width:520px}h1{text-align:center;color:#38bdf8;font-size:1.55rem;margin:10px 0 5px}.sub{text-align:center;color:#94a3b8;font-size:.8rem;margin-bottom:14px}.model{text-align:center;color:#94a3b8;font-size:.82rem;margin-bottom:12px}.card{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:16px;margin-bottom:12px}.t{color:#94a3b8;text-transform:uppercase;font-size:.82rem;font-weight:700;margin-bottom:8px}.v{font-size:1.55rem;font-weight:800}.LONG{color:#4ade80}.SHORT{color:#f87171}.NEUTRAL{color:#fbbf24}.d{font-size:.9rem;color:#cbd5e1;margin-top:7px;line-height:1.5}.error{color:#fecaca}button{width:100%;padding:14px;border:0;border-radius:10px;background:#0284c7;color:#fff;font-size:1rem;font-weight:800}
 </style>
 </head>
 <body>
-<div class="container">
+<div class="wrap">
 <h1>ETH ML Market Radar</h1>
-<div class="sub">1H Microstructure · 12H CatBoost · 24H Derivatives Trend</div>
-<div id="model" class="model">Загрузка...</div>
-<div id="content"><div class="card">Получаю данные...</div></div>
+<div class="sub">Gemini logic · OKX perpetual data</div>
+<div id="model" class="model">Проверка модели...</div>
+<div id="content"><div class="card">Загрузка...</div></div>
 <button onclick="loadData()">Обновить</button>
 </div>
 <script>
 async function loadData(){
- const c=document.getElementById('content');
- const m=document.getElementById('model');
- c.innerHTML='<div class="card">Получаю данные...</div>';
+ const c=document.getElementById('content'),m=document.getElementById('model');
  try{
    const r=await fetch('/api/v1/predict',{cache:'no-store'});
    const d=await r.json();
    if(d.status!=='ok'){
-      c.innerHTML=`<div class="card error">Ошибка: ${d.message}</div>`;
-      return;
+     c.innerHTML=`<div class="card error">Ошибка: ${d.message}</div>`;
+     return;
    }
-   m.textContent=d.model_loaded?'CatBoost-модель загружена':'CatBoost пока не загружен — 12H fallback 50%';
-   const card=(t,h)=>`<div class="card"><div class="title">${t}</div><div class="value ${h.direction}">${h.direction}</div><div class="details">Вероятность роста: <b>${h.probability_up}%</b><br>Уверенность: <b>${h.confidence}%</b></div></div>`;
+   if(d.model_loaded){
+      m.textContent='CatBoost-модель активна';
+   }else if(d.model_training){
+      m.textContent='CatBoost обучается в фоне — 12H временно 50%';
+   }else{
+      m.textContent='CatBoost пока не загружен — 12H временно 50%';
+   }
+   const card=(t,h)=>`<div class="card"><div class="t">${t}</div><div class="v ${h.direction}">${h.direction}</div><div class="d">Вероятность роста: <b>${h.probability_up}%</b><br>Уверенность: <b>${h.confidence}%</b></div></div>`;
    c.innerHTML=card('Прогноз на 1 час',d.horizon_1h)+card('Прогноз на 12 часов — CatBoost',d.horizon_12h)+card('Прогноз на 24 часа',d.horizon_24h);
  }catch(e){
    c.innerHTML='<div class="card error">Ошибка соединения с сервером</div>';

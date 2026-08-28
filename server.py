@@ -3,6 +3,8 @@ import threading
 import requests
 import numpy as np
 import pandas as pd
+import xml.etree.ElementTree as ET
+from email.utils import parsedate_to_datetime
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -13,6 +15,7 @@ app = FastAPI(title="Binary Crypto ML Radar Engine")
 MODEL_PATH = "catboost_eth_model.cbm"
 OKX_URL = "https://www.okx.com"
 INST_ID = "ETH-USDT-SWAP"
+ETH_NEWS_RSS = "https://app.chaingpt.org/rssfeeds-ethereum.xml"
 
 ml_model = None
 model_training = False
@@ -204,6 +207,112 @@ def stabilize_slow(key, raw_p, closed_1h_ts, long_thr, short_thr):
     s["probability"] = raw_p
     s["confidence"] = abs(raw_p - 0.50) * 200.0
     s["last_candle_ts"] = closed_1h_ts
+
+
+# -----------------------------
+# ETH NEWS ENGINE
+# -----------------------------
+BULLISH_WORDS = {
+    "approval": 2, "approved": 2, "inflow": 2, "inflows": 2, "adoption": 2,
+    "upgrade": 1, "surge": 2, "rally": 2, "bullish": 2, "buy": 1,
+    "accumulation": 2, "record": 1, "growth": 1, "launch": 1,
+    "partnership": 1, "institutional": 1, "staking": 1, "breakout": 2,
+}
+BEARISH_WORDS = {
+    "hack": -3, "hacked": -3, "exploit": -3, "outflow": -2, "outflows": -2,
+    "lawsuit": -2, "ban": -3, "bearish": -2, "selloff": -2, "sell-off": -2,
+    "liquidation": -2, "liquidations": -2, "decline": -1, "drop": -1,
+    "crash": -3, "fraud": -3, "attack": -2, "rejection": -2, "rejected": -2,
+}
+
+def score_news_text(text):
+    t = (text or "").lower()
+    score = 0
+    for word, value in BULLISH_WORDS.items():
+        if word in t:
+            score += value
+    for word, value in BEARISH_WORDS.items():
+        if word in t:
+            score += value
+
+    if score >= 2:
+        sentiment = "BULLISH"
+    elif score <= -2:
+        sentiment = "BEARISH"
+    else:
+        sentiment = "NEUTRAL"
+
+    impact = min(100, abs(score) * 18)
+    return sentiment, impact, score
+
+def fetch_eth_news(limit=6):
+    r = requests.get(
+        ETH_NEWS_RSS,
+        timeout=20,
+        headers={"User-Agent": "ETH-PRO/1.0"},
+    )
+    r.raise_for_status()
+
+    root = ET.fromstring(r.content)
+    items = []
+
+    for item in root.findall(".//item")[:limit]:
+        title = (item.findtext("title") or "").strip()
+        description = (item.findtext("description") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        pub_date = (item.findtext("pubDate") or "").strip()
+
+        sentiment, impact, raw_score = score_news_text(f"{title} {description}")
+
+        published_iso = pub_date
+        if pub_date:
+            try:
+                published_iso = parsedate_to_datetime(pub_date).isoformat()
+            except Exception:
+                pass
+
+        items.append({
+            "title": title,
+            "link": link,
+            "published": published_iso,
+            "sentiment": sentiment,
+            "impact": impact,
+            "raw_score": raw_score,
+        })
+
+    bullish = sum(1 for x in items if x["sentiment"] == "BULLISH")
+    bearish = sum(1 for x in items if x["sentiment"] == "BEARISH")
+    neutral = sum(1 for x in items if x["sentiment"] == "NEUTRAL")
+    total_score = sum(x["raw_score"] for x in items)
+
+    if total_score >= 3:
+        overall = "BULLISH"
+    elif total_score <= -3:
+        overall = "BEARISH"
+    else:
+        overall = "NEUTRAL"
+
+    return {
+        "status": "ok",
+        "source": "ChainGPT Ethereum RSS",
+        "overall": overall,
+        "bullish": bullish,
+        "bearish": bearish,
+        "neutral": neutral,
+        "articles": items,
+    }
+
+@app.get("/api/v1/news")
+def eth_news():
+    try:
+        return fetch_eth_news()
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "source": "ChainGPT Ethereum RSS",
+            "articles": [],
+        }
 
 @app.get("/api/health")
 def health():

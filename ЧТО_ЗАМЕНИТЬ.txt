@@ -1,0 +1,35 @@
+ETH RADAR V2 — WHALE ENGINE PATCH
+
+ЗАМЕНИ/ДОБАВЬ 4 ФАЙЛА В GITHUB:
+
+1) server.py -> корень
+2) whale_engine.py -> корень (НОВЫЙ ФАЙЛ)
+3) requirements.txt -> корень
+4) static/index.html -> папка static
+
+В Render -> Environment добавь:
+
+ETHERSCAN_API_KEY = твой ключ Etherscan
+
+WHALE_WALLETS_JSON = JSON со своими whale-адресами, например:
+{"0x1111111111111111111111111111111111111111":"whale_1","0x2222222222222222222222222222222222222222":"whale_2"}
+
+Опционально:
+WHALE_MIN_ETH = 100
+
+Можно заменить/расширить список бирж:
+EXCHANGE_WALLETS_JSON = {"0x...":"binance","0x...":"coinbase"}
+
+ЧТО ДЕЛАЕТ:
+- Etherscan API V2, Ethereum chainid=1
+- отслеживает переводы выбранных whale-кошельков
+- считает exchange inflow / exchange outflow / netflow
+- окна 15m / 1h / 4h / 12h
+- одиночные небольшие переводы НЕ переворачивают сигнал
+- показывает отдельный WHALE FLOW в интерфейсе
+- НЕ меняет LONG/SHORT модели автоматически
+- данные Whale Flow возвращаются также в /api/v2/predict как whale_context
+
+ВАЖНО:
+Чтобы добавить whale-flow прямо в обучение ML, сначала нужно накопить исторический ряд этих признаков.
+Подмешивать только текущий whale-flow в модель, обученную без него, было бы статистически неправильно.

@@ -1,8 +1,0 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-requests>=2.31
-pandas>=2.2
-numpy>=1.26
-pytest>=8.0
-pywebpush>=2.0.3
-cryptography>=43.0

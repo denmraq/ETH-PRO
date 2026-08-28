@@ -1,172 +1,119 @@
 import time
+from pathlib import Path
 import requests
+import numpy as np
 import pandas as pd
-from catboost import CatBoostClassifier
+import joblib
+from lightgbm import LGBMClassifier
+from sklearn.metrics import accuracy_score, brier_score_loss
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import TimeSeriesSplit
+from ml.features import build_features, binary_target, future_return, FEATURE_COLUMNS
 
-OKX_URL = "https://www.okx.com"
-INST_ID = "ETH-USDT-SWAP"
-MODEL_PATH = "catboost_eth_model.cbm"
+OKX = "https://www.okx.com"
+INST = "ETH-USDT-SWAP"
+MODEL_PATH = "ml/eth_direction_lgbm.joblib"
+REPORT_PATH = "ml/walk_forward_report.json"
 
 def okx_get(path, params=None):
-    r = requests.get(
-        f"{OKX_URL}{path}",
-        params=params or {},
-        timeout=30,
-        headers={"User-Agent": "ETH-PRO/1.0"},
-    )
+    r = requests.get(f"{OKX}{path}", params=params or {}, timeout=20,
+                     headers={"User-Agent":"ETH-RADAR/2.0"})
     r.raise_for_status()
-    payload = r.json()
-    if payload.get("code") != "0":
-        raise RuntimeError(payload.get("msg") or f"OKX error code {payload.get('code')}")
-    return payload.get("data", [])
+    p = r.json()
+    if p.get("code") != "0":
+        raise RuntimeError(p.get("msg") or str(p))
+    return p.get("data", [])
 
-def fetch_hourly_history(target=2160):
-    """
-    OKX history-candles: собираем до ~90 дней часовых данных.
-    Это ~2160 наблюдений, достаточно для первой рабочей CatBoost-модели.
-    """
-    rows = []
-    after = None
-
-    while len(rows) < target:
-        params = {
-            "instId": INST_ID,
-            "bar": "1H",
-            "limit": "100",
-        }
-        if after is not None:
-            params["after"] = str(after)
-
-        batch = okx_get("/api/v5/market/history-candles", params)
-        if not batch:
+def history_1h(target_bars=9000):
+    rows, after = [], None
+    while len(rows) < target_bars:
+        params = {"instId": INST, "bar": "1H", "limit": "100"}
+        if after:
+            params["after"] = after
+        chunk = okx_get("/api/v5/market/history-candles", params)
+        if not chunk:
             break
-
-        rows.extend(batch)
-        oldest_ts = min(int(x[0]) for x in batch)
-
-        if after is not None and oldest_ts >= after:
+        rows.extend(chunk)
+        after = chunk[-1][0]
+        time.sleep(0.08)
+        if len(chunk) < 100:
             break
-
-        after = oldest_ts
-        print(f"Candles: {len(rows)}")
-        time.sleep(0.12)
-
-        if len(batch) < 100:
-            break
-
-    cols = ["time","open","high","low","close","volume","vol_ccy","qav","confirm"]
-    df = pd.DataFrame(rows, columns=cols)
-
-    for col in ["time","open","high","low","close","volume"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    df = (
-        df.drop_duplicates("time")
-          .sort_values("time")
-          .reset_index(drop=True)
-    )
-    return df
-
-def fetch_funding_history(oldest_ts):
-    rows = []
-    after = None
-
-    for _ in range(40):
-        params = {
-            "instId": INST_ID,
-            "limit": "100",
-        }
-        if after is not None:
-            params["after"] = str(after)
-
-        batch = okx_get("/api/v5/public/funding-rate-history", params)
-        if not batch:
-            break
-
-        rows.extend(batch)
-
-        times = [int(x["fundingTime"]) for x in batch]
-        oldest = min(times)
-
-        print(f"Funding rows: {len(rows)}")
-
-        if oldest <= oldest_ts:
-            break
-        if after is not None and oldest >= after:
-            break
-
-        after = oldest
-        time.sleep(0.12)
-
-        if len(batch) < 100:
-            break
-
-    if not rows:
-        return pd.DataFrame(columns=["fundingTime","funding_rate"])
-
-    f = pd.DataFrame(rows)
-    f["fundingTime"] = pd.to_numeric(f["fundingTime"], errors="coerce")
-    f["funding_rate"] = pd.to_numeric(f["fundingRate"], errors="coerce")
-    return (
-        f[["fundingTime","funding_rate"]]
-        .drop_duplicates("fundingTime")
-        .sort_values("fundingTime")
-        .reset_index(drop=True)
-    )
+    cols = ["t","o","h","l","c","v","vol_ccy","qav","confirm"]
+    df = pd.DataFrame(rows, columns=cols).drop_duplicates("t")
+    for c in ["t","o","h","l","c","v","qav","confirm"]:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df = df.sort_values("t").reset_index(drop=True)
+    return df[df["confirm"] == 1].copy()
 
 def train_model():
-    df = fetch_hourly_history()
-    if len(df) < 500:
-        raise RuntimeError(f"Недостаточно исторических свечей OKX: {len(df)}")
+    df = history_1h()
+    X = build_features(df, funding_rate=0.0)
+    y = binary_target(df, 12)
+    ret = future_return(df, 12)
 
-    funding = fetch_funding_history(int(df["time"].iloc[0]))
+    data = X.copy()
+    data["target"] = y
+    data["future_return"] = ret
+    data = data.dropna().reset_index(drop=True)
 
-    if funding.empty:
-        df["funding_rate"] = 0.0
-    else:
-        df = pd.merge_asof(
-            df.sort_values("time"),
-            funding.sort_values("fundingTime"),
-            left_on="time",
-            right_on="fundingTime",
-            direction="backward",
+    X = data[FEATURE_COLUMNS]
+    y = data["target"].astype(int)
+
+    splitter = TimeSeriesSplit(n_splits=6, gap=12)
+    fold_results = []
+    oof_p, oof_y = [], []
+
+    for fold, (tr, va) in enumerate(splitter.split(X), 1):
+        model = LGBMClassifier(
+            n_estimators=500,
+            learning_rate=0.025,
+            num_leaves=24,
+            max_depth=-1,
+            subsample=0.85,
+            colsample_bytree=0.85,
+            random_state=42,
         )
-        df["funding_rate"] = df["funding_rate"].fillna(0.0)
+        model.fit(X.iloc[tr], y.iloc[tr])
+        p = model.predict_proba(X.iloc[va])[:,1]
+        pred = (p > 0.5).astype(int)
+        fold_results.append({
+            "fold": fold,
+            "accuracy": float(accuracy_score(y.iloc[va], pred)),
+            "brier": float(brier_score_loss(y.iloc[va], p)),
+            "n": int(len(va)),
+        })
+        oof_p.extend(p.tolist())
+        oof_y.extend(y.iloc[va].tolist())
 
-    # Gemini feature logic
-    df["returns"] = df["close"].pct_change()
-    df["volatility"] = df["returns"].rolling(12).std()
-    df["volume_change"] = df["volume"].pct_change()
-
-    # Gemini 12H target:
-    # 1, если через 12 часов цена выше более чем на 1.5%.
-    future_return = df["close"].shift(-12) / df["close"] - 1.0
-    df["target"] = (future_return > 0.015).astype(int)
-
-    # Последние 12 строк не имеют известного future target.
-    df = df.iloc[:-12].dropna().reset_index(drop=True)
-
-    features = ["returns","volatility","volume_change","funding_rate"]
-    X = df[features]
-    y = df["target"]
-
-    if y.nunique() < 2:
-        raise RuntimeError("Training target has only one class")
-
-    print(f"Training rows: {len(df)}")
-    print(f"Positive class: {y.mean():.4f}")
-
-    model = CatBoostClassifier(
-        iterations=500,
-        depth=6,
-        learning_rate=0.03,
-        loss_function="Logloss",
-        random_seed=42,
-        verbose=100,
+    base_model = LGBMClassifier(
+        n_estimators=650,
+        learning_rate=0.02,
+        num_leaves=24,
+        subsample=0.9,
+        colsample_bytree=0.9,
+        random_state=42,
     )
-    model.fit(X, y)
-    model.save_model(MODEL_PATH)
-    print(f"Saved: {MODEL_PATH}")
+    # Time-series split logic above is kept for validation.
+    # Final probabilities are calibrated to make 60/70/80% more meaningful.
+    cut = max(300, int(len(X) * 0.82))
+    base_model.fit(X.iloc[:cut], y.iloc[:cut])
+    calibrated = CalibratedClassifierCV(base_model, method="sigmoid", cv="prefit")
+    calibrated.fit(X.iloc[cut:], y.iloc[cut:])
+    final_model = calibrated
+    Path("ml").mkdir(exist_ok=True)
+    joblib.dump(final_model, MODEL_PATH)
+
+    report = {
+        "rows": int(len(X)),
+        "folds": fold_results,
+        "overall_accuracy": float(accuracy_score(oof_y, (np.array(oof_p)>0.5).astype(int))),
+        "overall_brier": float(brier_score_loss(oof_y, oof_p)),
+        "target": "Price(t+12h) > Price(t)",
+    }
+    import json
+    Path(REPORT_PATH).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(report)
+    return report
 
 if __name__ == "__main__":
     train_model()

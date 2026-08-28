@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="ETH Radar PRO"><meta name="format-detection" content="telephone=no"><link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png"><title>ETH Entry Radar PRO</title>
+<style>
+:root{--bg:#0b0d12;--card:#151924;--muted:#8d96aa;--text:#f4f7fb;--green:#35d07f;--red:#ff5b67;--blue:#62a8ff;--yellow:#ffd166;--line:#252b38}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{max-width:760px;margin:auto;padding:18px 14px 42px}.title{font-size:25px;font-weight:900}.sub{font-size:12px;color:var(--muted);line-height:1.45}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin:12px 0}.price{font-size:40px;font-weight:900}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.kv{padding:14px;border:1px solid var(--line);border-radius:14px}.k{font-size:11px;color:var(--muted);margin-bottom:7px}.v{font-size:19px;font-weight:850}.forecast{font-size:23px}.green{color:var(--green)}.red{color:var(--red)}.yellow{color:var(--yellow)}h3{margin:0 0 10px;font-size:22px}ul{padding-left:20px;margin:8px 0 0}li{margin:7px 0;color:#dbe1ec}button{width:100%;border:0;border-radius:14px;padding:14px;background:var(--blue);font-weight:900;font-size:16px;margin-top:10px}button:disabled{opacity:.7}.spin{display:inline-block;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.newsTitle{font-weight:850;line-height:1.35}.newsMeta{font-size:12px;color:var(--muted);margin-top:8px}.badge{display:inline-block;padding:4px 7px;border-radius:8px;background:#202636;font-size:11px;font-weight:850}.high{color:var(--red)}.medium{color:var(--yellow)}.foot{font-size:11px;color:var(--muted);text-align:center;margin-top:18px;line-height:1.45}.error{display:none;background:rgba(255,91,103,.10);border-color:rgba(255,91,103,.35);color:#ffd9dc}
+@media(max-width:540px){.grid{grid-template-columns:1fr}.title{font-size:23px}.forecast{font-size:22px}}
+</style></head>
+<body><div class="wrap">
+<div class="title">📡 ETH Entry Radar PRO</div>
+<div class="sub">PRO V1.25 · FUTURE ONLY · прогноз следующего движения на 1ч / 6ч / 12ч</div>
+
+<div id="errorCard" class="card error"><b>Ошибка данных</b><div id="errorText" class="sub" style="margin-top:8px;color:#ffd9dc"></div></div>
+
+<div class="card"><div class="sub">ETH/USDT · ТЕКУЩАЯ ЦЕНА ТОЛЬКО КАК ТОЧКА ОТСЧЁТА</div><div id="price" class="price">—</div><div class="sub" style="margin-top:8px">Направление ниже — не описание текущей свечи, а прогноз того, куда вероятнее уйдёт цена после текущего состояния.</div></div>
+
+<div class="card"><h3>🔮 Прогноз будущего</h3><div class="grid">
+<div class="kv"><div class="k">БЛИЖАЙШИЙ 1 ЧАС</div><div id="forecast1h" class="v forecast">—</div><div id="eta1h" class="sub"></div></div>
+<div class="kv"><div class="k">БЛИЖАЙШИЕ 6 ЧАСОВ</div><div id="forecast6h" class="v forecast">—</div><div id="eta6h" class="sub"></div></div>
+<div class="kv"><div class="k">БЛИЖАЙШИЕ 12 ЧАСОВ</div><div id="forecast12h" class="v forecast">—</div><div id="eta12h" class="sub"></div></div>
+<div class="kv"><div class="k">УВЕРЕННОСТЬ МОДЕЛИ</div><div id="forecastConfidence" class="v">—</div><div class="sub">Это уверенность предсказателя, а не гарантия сделки.</div></div>
+</div><div class="sub" style="margin-top:12px">1ч фиксируется на 20 минут, 6ч — на 60 минут, 12ч — на 120 минут. Направление не должно прыгать вслед за каждой 1м свечой. Внеплановый пересмотр допускается только при сильном подтверждённом изменении входных условий или важной новости.</div></div>
+
+<div class="card"><h3>📰 Новости / Макро</h3><div id="newsFocus"><div class="sub">Загрузка новостей…</div></div><div class="grid" style="margin-top:10px"><div class="kv"><div class="k">ВЛИЯНИЕ НА ETH</div><div id="newsBias" class="v">—</div></div><div class="kv"><div class="k">РЫНОК ПОДТВЕРЖДАЕТ</div><div id="newsConfirm" class="v">—</div></div><div class="kv"><div class="k">РЕАКЦИЯ ETH</div><div id="newsEth" class="v">—</div></div><div class="kv"><div class="k">РЕАКЦИЯ BTC</div><div id="newsBtc" class="v">—</div></div></div><div class="sub" id="newsNote" style="margin-top:10px"></div></div>
+
+<div class="card"><h3>📊 Качество входных данных</h3><div class="grid"><div class="kv"><div class="k">КАЧЕСТВО ДАННЫХ</div><div id="dataConfidence" class="v">—</div></div><div class="kv"><div class="k">ПОСЛЕДНЯЯ ЗАКРЫТАЯ 15м</div><div id="closed" class="v">—</div></div></div><ul id="quality"></ul></div>
+<div id="warnCard" class="card" style="display:none"><h3>ℹ️ Ограничения</h3><ul id="warnings"></ul></div>
+
+<button id="refreshBtn" onclick="manualRefresh()"><span id="refreshIcon">↻</span> <span id="refreshText">Обновить сейчас</span></button>
+<div class="sub" id="refreshStatus" style="text-align:center;margin-top:8px;min-height:16px">Последнее обновление: —</div>
+<div class="foot">В этой версии убраны скальпинг, Push-приоритет, текущие LONG/SHORT-баллы, Fast 1m и карта ликвидаций. Карта ликвидаций была полностью отключена, потому что именно после её интеграции появилась нестабильность ответа API. Предсказатель строится по состоянию рынка сейчас, но его целевые метки — фактическое направление ПОСЛЕ похожих состояний через 1ч / 6ч / 12ч. История используется только как обучающая выборка будущих исходов.</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+function fill(id,a){const ul=$(id);ul.innerHTML='';(a||[]).forEach(x=>{const li=document.createElement('li');li.textContent=x;ul.appendChild(li)})}
+function pct(x){if(x===null||x===undefined||!Number.isFinite(Number(x)))return '—';const n=Number(x);return `${n>=0?'+':''}${n.toFixed(2)}%`}
+function forecastText(dir,p){if(!dir||!Number.isFinite(Number(p)))return '—';return `${dir} · ${Number(p).toFixed(1)}%`}
+function colorize(el,dir){el.classList.remove('green','red');if(dir==='LONG')el.classList.add('green');if(dir==='SHORT')el.classList.add('red')}
+function etaText(v){return Number.isFinite(Number(v))?`Ожидаемое окно импульса: ~${Number(v)} мин`:'Окно импульса: —'}
+async function loadAll(manual=false){const started=performance.now();try{
+ const [rr,nn]=await Promise.all([fetch('/api/radar?t='+Date.now(),{cache:'no-store'}),fetch('/api/news?t='+Date.now(),{cache:'no-store'})]);
+ if(!rr.ok)throw new Error('radar '+rr.status);
+ const r=await rr.json(); const n=nn.ok?await nn.json():{};
+ if(r._radar_error && (!Number.isFinite(Number(r.price)))) throw new Error(r._radar_error);
+ $('errorCard').style.display=r._radar_error?'block':'none'; $('errorText').textContent=r._radar_error||'';
+ const livePrice=Number(r.price); $('price').textContent=Number.isFinite(livePrice)?livePrice.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+ const d1=r.forecast_direction_1h,d6=r.forecast_direction_6h,d12=r.forecast_direction_12h;
+ $('forecast1h').textContent=forecastText(d1,r.forecast_probability_1h); colorize($('forecast1h'),d1); $('eta1h').textContent=etaText(r.forecast_eta_1h_min);
+ $('forecast6h').textContent=forecastText(d6,r.forecast_probability_6h); colorize($('forecast6h'),d6); $('eta6h').textContent=etaText(r.forecast_eta_6h_min);
+ $('forecast12h').textContent=forecastText(d12,r.forecast_probability_12h); colorize($('forecast12h'),d12); $('eta12h').textContent=etaText(r.forecast_eta_12h_min);
+ $('forecastConfidence').textContent=Number.isFinite(Number(r.forecast_confidence))?`${r.forecast_confidence}/100`:'—';
+ $('dataConfidence').textContent=Number.isFinite(Number(r.data_confidence))?`${r.data_confidence}/100`:'—';
+ $('closed').textContent=r.last_closed_15m_utc?new Date(r.last_closed_15m_utc).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'—';
+ fill('quality',r.data_quality);fill('warnings',r.warnings);$('warnCard').style.display=(r.warnings||[]).length?'block':'none';
+ const impactRu={LOW:'НИЗКОЕ',MEDIUM:'СРЕДНЕЕ',HIGH:'ВЫСОКОЕ'};const f=n.focus;
+ if(f){$('newsFocus').innerHTML=`<div><span class="badge ${String(f.impact).toLowerCase()}">${impactRu[f.impact]||f.impact}</span> <span class="badge"></span></div><div class="newsTitle" style="margin-top:8px"></div><div class="newsMeta">${f.age_min} мин после обнаружения · оценка ${f.score}</div>`;$('newsFocus').querySelectorAll('.badge')[1].textContent=f.source||'';$('newsFocus').querySelector('.newsTitle').textContent=f.title_ru||'Важное событие';$('newsBias').textContent=({NEUTRAL:'НЕЙТРАЛЬНО',LONG:'LONG',SHORT:'SHORT'}[f.eth_bias]||f.eth_bias)+' '+(f.score>=0?'+':'')+f.score;$('newsConfirm').textContent=({YES:'ДА',WAITING:'ОЖИДАНИЕ',NO:'НЕТ'}[f.market_confirms]||f.market_confirms);$('newsEth').textContent=pct(f.eth_reaction_pct);$('newsBtc').textContent=pct(f.btc_reaction_pct);}else{$('newsFocus').innerHTML='<div class="sub">Активного релевантного события сейчас нет.</div>';$('newsBias').textContent=$('newsConfirm').textContent=$('newsEth').textContent=$('newsBtc').textContent='—';}
+ $('newsNote').textContent=n.note||'';
+ $('refreshStatus').textContent=`Последнее обновление: ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})} · ${((performance.now()-started)/1000).toFixed(1)} сек`;
+ if(manual&&navigator.vibrate)navigator.vibrate(35);return true;
+}catch(e){$('errorCard').style.display='block';$('errorText').textContent=e.message;$('refreshStatus').textContent='Ошибка обновления: '+e.message;console.error(e);return false}}
+async function manualRefresh(){const b=$('refreshBtn'),i=$('refreshIcon'),t=$('refreshText');if(b.disabled)return;b.disabled=true;i.classList.add('spin');t.textContent='Обновляю…';const ok=await loadAll(true);i.classList.remove('spin');t.textContent=ok?'Обновлено ✓':'Повторить обновление';setTimeout(()=>{t.textContent='Обновить сейчас';b.disabled=false},1200)}
+loadAll();
+</script></body></html>

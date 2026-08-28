@@ -1,54 +1,144 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ETH Predictive Engine</title>
-<style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0b0f19;color:#eef2f7;margin:0;padding:18px}
-.wrap{max-width:520px;margin:auto}.card{background:#151e2e;border:1px solid #29364e;border-radius:16px;padding:17px;margin:12px 0}
-h1{color:#55b8ef;font-size:24px}.LONG,.BULLISH{color:#52d273}.SHORT,.BEARISH{color:#ff625f}.NEUTRAL{color:#f6c44f}
-.big{font-size:34px;font-weight:900}.small{color:#97a4b9;line-height:1.5}.bar{height:9px;background:#26334a;border-radius:10px;overflow:hidden}.fill{height:100%;background:#7fa7ff}
-.news{padding:10px 0;border-top:1px solid #26334a}.news a{color:#e8edf5;text-decoration:none;font-weight:650}
-button{width:100%;padding:14px;background:#318bd0;color:white;border:0;border-radius:10px;font-size:17px;font-weight:800}
-</style></head><body><div class="wrap">
-<h1>ETH RADAR V2</h1><div id="health" class="small">Загрузка...</div>
-<div id="pred"></div>
-<div class="card"><b>WHALE FLOW</b><div id="whales" class="small">...</div></div>
-<div class="card"><b>Проверка модели (Walk-Forward)</b><div id="val" class="small">...</div></div>
-<div class="card"><b>Новости ETH — на русском</b><div id="news"></div></div>
-<button onclick="loadAll()">Обновить</button>
-</div>
-<script>
-function card(name,h){
- let ci=h.confidence_interval_pct;
- return `<div class="card"><div class="small">${name}</div><div class="big ${h.direction}">${h.direction}</div>
- <div>Модельная вероятность: <b>${h.probability}%</b></div>
- <div class="small">Ожидаемый возврат: ${h.expected_return_pct}% · 95% интервал: ${ci[0]}% … ${ci[1]}%</div>
- <div class="small">SL ${h.risk.stop_loss} · TP ${h.risk.take_profit} · Kelly ${(h.risk.kelly_fraction*100).toFixed(1)}% ${h.risk.kill_switch?'· KILL-SWITCH':''}</div></div>`
-}
-async function loadAll(){
- const p=await fetch('/api/v2/predict',{cache:'no-store'}).then(r=>r.json());
- document.getElementById('health').innerHTML=`Цена ${p.price} · OKX · OFI ${p.features.ofi} · Funding ${p.features.funding_rate}`;
- document.getElementById('pred').innerHTML=card('1 ЧАС',p.horizon_1h)+card('12 ЧАСОВ',p.horizon_12h)+card('24 ЧАСА',p.horizon_24h);
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b0f19">
+    <title>ETH Binary Radar Engine</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0b0f19;
+            color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container { max-width: 480px; width: 100%; }
+        h1 {
+            text-align: center;
+            color: #38bdf8;
+            font-size: 1.4rem;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+        }
+        .status {
+            text-align: center;
+            color: #64748b;
+            font-size: 0.82rem;
+            margin: 0 0 14px;
+            line-height: 1.45;
+        }
+        .card {
+            background: #151e2e;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 14px;
+            border: 1px solid #24334a;
+        }
+        .horizon-title {
+            font-weight: 700;
+            color: #64748b;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+        .val {
+            font-size: 2rem;
+            font-weight: 900;
+            letter-spacing: 1px;
+        }
+        .LONG { color: #22c55e; }
+        .SHORT { color: #ef4444; }
+        .details {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-top: 6px;
+            line-height: 1.45;
+        }
+        .note {
+            font-size: 0.78rem;
+            color: #64748b;
+            margin-top: 8px;
+        }
+        button {
+            width: 100%;
+            background: #0284c7;
+            color: #fff;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ETH RADAR: LONG / SHORT</h1>
+        <div id="status" class="status">Проверка модели...</div>
+        <div id="content">Получение сигналов...</div>
+        <button onclick="loadPredictions()">Обновить Радар</button>
+    </div>
 
- const w=await fetch('/api/v2/whales',{cache:'no-store'}).then(r=>r.json());
- if(w.status==='ok'){
-   const order=['15m','1h','4h','12h'];
-   document.getElementById('whales').innerHTML=order.map(k=>{
-      const x=w.windows[k];
-      const cls=x.signal==='ACCUMULATION'?'BULLISH':(x.signal==='EXCHANGE_INFLOW'?'BEARISH':'NEUTRAL');
-      const ru=x.signal==='ACCUMULATION'?'НАКОПЛЕНИЕ':(x.signal==='EXCHANGE_INFLOW'?'ПРИТОК НА БИРЖИ':'НЕЙТРАЛЬНО');
-      return `<div class="news"><b>${k}</b> · <span class="${cls}">${ru}</span><br>
-      In ${x.inflow_eth} ETH · Out ${x.outflow_eth} ETH · Net ${x.netflow_eth} ETH · событий ${x.events}</div>`;
-   }).join('');
- } else {
-   document.getElementById('whales').innerHTML=w.message || 'Whale Engine не настроен';
- }
+    <script>
+        async function loadPredictions() {
+            const container = document.getElementById('content');
+            const status = document.getElementById('status');
 
- const v=await fetch('/api/v2/validation',{cache:'no-store'}).then(r=>r.json());
- document.getElementById('val').innerHTML=v.overall_accuracy?`Accuracy ${(v.overall_accuracy*100).toFixed(1)}% · Brier ${v.overall_brier.toFixed(3)} · ${v.rows} строк`:'Модель ещё обучается';
- const n=await fetch('/api/v2/news',{cache:'no-store'}).then(r=>r.json());
- document.getElementById('news').innerHTML=n.articles.map(x=>`<div class="news"><a target="_blank" href="${x.link}">${x.title}</a><div class="small ${x.sentiment}">${x.sentiment}</div></div>`).join('');
-}
-loadAll();
-</script></body></html>
+            try {
+                const res = await fetch('/api/v1/predict', { cache: 'no-store' });
+                const data = await res.json();
+
+                if (data.status === 'error') {
+                    container.innerHTML = `<div class="card">Ошибка: ${data.message}</div>`;
+                    return;
+                }
+
+                const modelText = data.model_loaded
+                    ? 'CatBoost-модель активна'
+                    : (data.model_training ? 'CatBoost обучается...' : 'CatBoost пока не загружен');
+
+                status.innerHTML = `${modelText}<br>Signal Stabilizer: <b>активен</b>`;
+
+                const renderCard = (title, h, note) => `
+                    <div class="card">
+                        <div class="horizon-title">${title}</div>
+                        <div class="val ${h.direction}">${h.direction}</div>
+                        <div class="details">
+                            Вероятность исхода: <b>${h.probability}%</b> |
+                            Сила сигнала: <b>${h.confidence}%</b>
+                        </div>
+                        <div class="note">${note}</div>
+                    </div>
+                `;
+
+                container.innerHTML =
+                    renderCard(
+                        'Прогноз 1 Час',
+                        data.horizon_1h,
+                        'Смена только после 2 подтверждений на разных закрытых 15m свечах.'
+                    ) +
+                    renderCard(
+                        'Прогноз 12 Часов',
+                        data.horizon_12h,
+                        'Пересчет только после закрытия новой 1H свечи.'
+                    ) +
+                    renderCard(
+                        'Прогноз 24 Часа',
+                        data.horizon_24h,
+                        'Пересчет только после закрытия новой 1H свечи.'
+                    );
+
+            } catch (err) {
+                container.innerHTML = `<div class="card">Ошибка соединения с сервером</div>`;
+            }
+        }
+
+        loadPredictions();
+    </script>
+</body>
+</html>

@@ -16,3 +16,8 @@ GitHub Pages / PWA версия ETH/USDT радара.
 Распакуй содержимое архива в корень GitHub repository и включи GitHub Pages.
 
 Важно: FORCE — сила стороны внутри модели, а не статистически доказанная вероятность достижения цели.
+
+## Render Docker deployment
+This package includes a Dockerfile for Render services configured with Runtime = Docker.
+No custom Docker command is required. The container starts `node server.js` and listens on `process.env.PORT` (default 10000).
+Health check: `/health`.

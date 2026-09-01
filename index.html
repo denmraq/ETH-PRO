@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ETH RADAR MEDIUM — Крипто Пузырь</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#05070a">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ETH Radar">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #05070a;
+    --panel: #0d1218;
+    --panel-2: #10161d;
+    --line: #1e2831;
+    --long: #33ffb0;
+    --long-dim: #0f4a38;
+    --short: #ff4d6d;
+    --short-dim: #4a1522;
+    --neutral: #8a97a3;
+    --text: #e8edf2;
+    --text-dim: #7d8b96;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color: transparent;}
+  html,body{ height:100%; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family:'JetBrains Mono', monospace;
+    min-height:100vh;
+    padding: max(20px, env(safe-area-inset-top)) 14px calc(60px + env(safe-area-inset-bottom));
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(51,255,176,0.07), transparent 40%),
+      radial-gradient(circle at 85% 10%, rgba(255,77,109,0.06), transparent 40%);
+    overscroll-behavior-y: contain;
+  }
+  .wrap{ max-width: 480px; margin: 0 auto; }
+
+  header{ margin-bottom: 18px; }
+  .eyebrow{
+    font-size: 12px; color: var(--text-dim); letter-spacing: 0.02em;
+    display:flex; align-items:center; gap:8px; margin-bottom:6px;
+  }
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--long); box-shadow:0 0 8px var(--long); animation: pulse 1.6s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.35} }
+  h1{
+    font-family:'Space Grotesk', sans-serif; font-weight:700;
+    font-size: 26px; line-height:1.1; letter-spacing:-0.01em;
+  }
+  h1 span{ color: var(--long); }
+
+  .card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  label{ display:block; font-size:11px; color: var(--text-dim); margin-bottom:6px; }
+  .price-row{ display:flex; align-items:center; gap:10px; }
+  .price-row span{ font-family:'Space Grotesk',sans-serif; font-size:18px; color: var(--text-dim); }
+
+  .slider-block{ margin-top:14px; }
+  .slider-head{ display:flex; justify-content:space-between; font-size:11px; color:var(--text-dim); margin-bottom:6px;}
+  .slider-head b{ color: var(--text); font-size:12px; }
+  input[type=range]{
+    width:100%; -webkit-appearance:none; height:6px; border-radius:4px;
+    background: linear-gradient(90deg, var(--short) 0%, var(--line) 50%, var(--long) 100%);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:18px; height:18px; border-radius:50%;
+    background: var(--text); border:3px solid var(--bg); cursor:pointer; margin-top:-1px;
+  }
+  .scale{ display:flex; justify-content:space-between; font-size:10px; color:var(--text-dim); margin-top:4px; }
+
+  .live-row{
+    display:flex; align-items:center; gap:8px; font-size:11px; color: var(--text-dim);
+    margin-bottom:12px;
+  }
+  .live-dot{ width:7px; height:7px; border-radius:50%; background:#555; flex-shrink:0; }
+  .live-dot.on{ background: var(--long); box-shadow:0 0 8px var(--long); animation: pulse 1.6s infinite; }
+  .live-dot.off{ background: var(--short); box-shadow:0 0 8px var(--short); }
+  .live-time{ margin-left:auto; }
+
+  .price-display{
+    flex:1;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family:'Space Grotesk', sans-serif; font-weight:700;
+    font-size: 24px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    width: 100%;
+  }
+
+  button.scan{
+    width:100%; margin-top:16px; padding:15px;
+    background: var(--long); color:#00291d; border:none; border-radius: 10px;
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px;
+    letter-spacing:0.01em; cursor:pointer;
+    transition: transform .08s ease;
+  }
+  button.scan:active{ transform: scale(0.98); }
+  button.scan:disabled{ opacity:0.5; cursor:default; }
+
+  .install-hint{
+    display:none; align-items:center; gap:10px;
+    background: var(--panel-2); border:1px dashed var(--line); border-radius:12px;
+    padding:12px 14px; margin-bottom:12px; font-size:12px; color: var(--text-dim); line-height:1.5;
+  }
+  .install-hint.show{ display:flex; }
+  .install-hint button{
+    flex-shrink:0; background: var(--long); color:#00291d; border:none;
+    padding:8px 12px; border-radius:8px; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px; cursor:pointer;
+  }
+
+  /* RESULT */
+  .result{ display:none; }
+  .result.show{ display:block; }
+
+  .signal-card{
+    border-radius:14px; padding:18px; margin-bottom:12px;
+    border:1px solid var(--line);
+    position:relative; overflow:hidden;
+  }
+  .signal-card.long{ background: linear-gradient(160deg, var(--long-dim), var(--panel) 60%); border-color:#175943; }
+  .signal-card.short{ background: linear-gradient(160deg, var(--short-dim), var(--panel) 60%); border-color:#66222f; }
+
+  .sig-top{ display:flex; justify-content:space-between; align-items:flex-start; }
+  .sig-label{ font-size:11px; color: var(--text-dim); }
+  .sig-word{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:40px; line-height:1;
+    margin-top:4px;
+  }
+  .long .sig-word{ color: var(--long); }
+  .short .sig-word{ color: var(--short); }
+
+  .conf-pill{
+    font-size:11px; padding:6px 10px; border-radius:20px; white-space:nowrap;
+    background: rgba(255,255,255,0.06); border:1px solid var(--line);
+  }
+
+  .entry-line{ margin-top:12px; font-size:12.5px; color:var(--text-dim); }
+  .entry-line b{ color: var(--text); font-size:14px; }
+
+  .levels{ display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:14px; }
+  .lvl-box{ background: rgba(0,0,0,0.25); border-radius:10px; padding:9px 11px; border:1px solid var(--line); }
+  .lvl-box .k{ font-size:10.5px; color:var(--text-dim); margin-bottom:3px; }
+  .lvl-box .v{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:16px; }
+  .lvl-box.tp .v{ color: var(--long); }
+  .lvl-box.sl .v{ color: var(--short); }
+
+  .lead-panel{
+    background: var(--panel); border:1px solid var(--line); border-radius:12px; padding:13px;
+  }
+  .lead-panel-head{ font-size:11px; color:var(--text-dim); margin-bottom:9px; }
+  .lead-row{ display:grid; grid-template-columns: repeat(2,1fr); gap:8px; }
+  .lead-chip{
+    border-radius:10px; padding:9px 6px; text-align:center; border:1px solid var(--line);
+    background: rgba(0,0,0,0.25);
+  }
+  .lead-chip .lead-name{ font-size:10px; color:var(--text-dim); margin-bottom:5px; }
+  .lead-chip .lead-val{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:12.5px; }
+  .lead-chip.long .lead-val{ color: var(--long); }
+  .lead-chip.short .lead-val{ color: var(--short); }
+  .lead-chip.neutral .lead-val{ color: var(--neutral); }
+
+  .verdict{
+    margin-top:12px; font-size:12.5px; line-height:1.4; color: var(--text);
+    padding-top:12px; border-top:1px dashed var(--line);
+  }
+
+  footer{ margin-top:16px; font-size:10.5px; color: var(--text-dim); line-height:1.5; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow"><span class="dot"></span>ETH/USDT · 6–36Ч · LIVE</div>
+    <h1>Радар <span>ETH</span> — направление + цель</h1>
+  </header>
+
+  <div class="install-hint" id="installHint">
+    <span id="installText">Установи как приложение 📲</span>
+    <button id="installBtn">Установить</button>
+  </div>
+
+  <div class="card">
+    <div class="live-row">
+      <div class="live-dot" id="liveDot"></div>
+      <span id="liveStatus">Подключаюсь к Binance…</span>
+      <span class="live-time" id="liveTime"></span>
+    </div>
+
+    <label>Цена ETH (Binance, live)</label>
+    <div class="price-row">
+      <span>$</span>
+      <div class="price-display" id="price">—</div>
+    </div>
+
+    <div class="slider-block">
+      <div class="slider-head"><span>Сила сторон · Futures Flow Engine</span><b id="pressureLabel">— / 100</b></div>
+      <input type="range" id="pressure" min="0" max="100" value="50" disabled>
+      <div class="scale"><span>Шорт</span><span>Лонг</span></div>
+    </div>
+
+    <button class="scan" id="scanBtn" disabled>Загружаю данные…</button>
+  </div>
+
+  <div class="result" id="result">
+
+    <div class="signal-card" id="signalCard">
+      <div class="sig-top">
+        <div>
+          <div class="sig-label">Среднесрочный сигнал · 6–36ч</div>
+          <div class="sig-word" id="sigWord">LONG</div>
+        </div>
+        <div class="conf-pill" id="confPill">увер. 80%</div>
+      </div>
+
+      <div class="entry-line">Предпочтительный вход: <b id="entryPrice">—</b><br><span id="entryNote"></span></div>
+
+      <div class="levels">
+        <div class="lvl-box tp"><div class="k">LOCAL TARGET</div><div class="v" id="tp1">—</div></div>
+        <div class="lvl-box tp"><div class="k">MAIN TARGET</div><div class="v" id="tp2">—</div></div>
+        <div class="lvl-box sl"><div class="k">INVALIDATION</div><div class="v" id="sl">—</div></div>
+        <div class="lvl-box tp"><div class="k">EXTENDED</div><div class="v" id="tp3">—</div></div>
+      </div>
+
+      <div class="verdict" id="verdictText"></div>
+    </div>
+
+    <div class="lead-panel">
+      <div class="lead-panel-head">Что двигает сигнал</div>
+      <div class="lead-row" id="leadRow"></div>
+    </div>
+
+  </div>
+
+  <footer>Не финсовет. Риском и депозитом управляй сам 🫷</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const priceDisplay=$('price'), pressureInput=$('pressure'), pressureLabel=$('pressureLabel');
+const scanBtn=$('scanBtn'), result=$('result'), signalCard=$('signalCard'), sigWord=$('sigWord');
+const confPill=$('confPill'), entryPrice=$('entryPrice'), verdictText=$('verdictText');
+const liveDot=$('liveDot'), liveStatus=$('liveStatus'), liveTime=$('liveTime');
+
+function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+function fmt(n){return Number.isFinite(n)?'$'+n.toFixed(1):'—'}
+function avg(a){return a.length?a.reduce((x,y)=>x+y,0)/a.length:0}
+function ema(v,p){const k=2/(p+1);let e=v[0];for(let i=1;i<v.length;i++)e=v[i]*k+e*(1-k);return e}
+function atr(h,l,c,p=14){let tr=[];for(let i=1;i<h.length;i++)tr.push(Math.max(h[i]-l[i],Math.abs(h[i]-c[i-1]),Math.abs(l[i]-c[i-1])));return avg(tr.slice(-p))}
+function pct(a,b){return b?((a-b)/b):0}
+function scoreSign(x,scale){return clamp(x/scale,-1,1)}
+
+let state=null;
+
+function pivots(highs,lows,price){
+  const ph=[],pl=[];
+  for(let i=3;i<highs.length-3;i++){
+    let hi=true,lo=true;
+    for(let j=i-3;j<=i+3;j++){if(j===i)continue;if(highs[j]>=highs[i])hi=false;if(lows[j]<=lows[i])lo=false}
+    if(hi)ph.push(highs[i]); if(lo)pl.push(lows[i]);
+  }
+  const cluster=(levels,t=.0025)=>{if(!levels.length)return[];const s=[...levels].sort((a,b)=>a-b),out=[[s[0]]];for(let i=1;i<s.length;i++){const c=out.at(-1),m=avg(c);Math.abs(s[i]-m)/m<t?c.push(s[i]):out.push([s[i]])}return out.map(avg)};
+  const ch=cluster(ph),cl=cluster(pl);
+  return {res:ch.filter(x=>x>price).sort((a,b)=>a-b),sup:cl.filter(x=>x<price).sort((a,b)=>b-a)};
+}
+
+function flowFromKlines(ks){
+  return ks.map(k=>{const total=+k[5],buy=+k[9],sell=Math.max(0,total-buy);return {delta:buy-sell,total,buy,sell}})
+}
+
+function calcEngine(k15,k1,k4,oiNow,funding){
+  const c15=k15.map(k=>+k[4]), h15=k15.map(k=>+k[2]), l15=k15.map(k=>+k[3]);
+  const c1=k1.map(k=>+k[4]), h1=k1.map(k=>+k[2]), l1=k1.map(k=>+k[3]);
+  const c4=k4.map(k=>+k[4]), h4=k4.map(k=>+k[2]), l4=k4.map(k=>+k[3]); const price=c15.at(-1); const A=atr(h1,l1,c1,14);
+  const f=flowFromKlines(k15), recent=f.slice(-12), fast=f.slice(-4), prev=f.slice(-8,-4);
+  const normDelta=a=>{const tv=a.reduce((s,x)=>s+x.total,0),d=a.reduce((s,x)=>s+x.delta,0);return tv?d/tv:0};
+  const flow=scoreSign(normDelta(recent),0.10);
+  const accel=scoreSign(normDelta(fast)-normDelta(prev),0.06);
+  const move4=pct(c15.at(-1),c15.at(-5));
+  const priceResponse=scoreSign(move4,0.0045);
+
+  // Absorption: aggressive flow without matching price response points to the opposite hidden side.
+  let absorption=0;
+  if(flow>0.25 && priceResponse<0.10) absorption=-clamp(flow-Math.max(priceResponse,0),0,1);
+  if(flow<-0.25 && priceResponse>-0.10) absorption=clamp(Math.abs(flow)-Math.max(-priceResponse,0),0,1);
+
+  const t15=scoreSign((ema(c15.slice(-50),8)-ema(c15.slice(-50),21))/price,0.0025);
+  const t1=scoreSign((ema(c1.slice(-80),8)-ema(c1.slice(-80),21))/price,0.006);
+  const t4=scoreSign((ema(c4.slice(-60),8)-ema(c4.slice(-60),21))/price,0.012);
+  const trend=t15*.25+t1*.40+t4*.35;
+
+  // OI: browser-safe snapshot plus local persistence. Direction comes from OI change * price direction.
+  const prevOI=+(localStorage.getItem('ethRadarOI')||0), oiChange=prevOI?pct(oiNow,prevOI):0;
+  localStorage.setItem('ethRadarOI',String(oiNow));
+  let oi=0;
+  if(prevOI && Math.abs(oiChange)>0.0002){
+    const dir=priceResponse>=0?1:-1;
+    oi=scoreSign(Math.abs(oiChange),0.004)*dir;
+  }
+
+  // Funding is deliberately small: crowded longs slightly favor short, crowded shorts slightly favor long.
+  const fund=-scoreSign(funding,0.00035)*0.35;
+
+  const lv=pivots(h1,l1,price), lv4=pivots(h4,l4,price), up=lv.res[0]??null, dn=lv.sup[0]??null;
+  let liquidity=0;
+  if(up&&dn){const du=(up-price)/price,dd=(price-dn)/price;liquidity=clamp((dd-du)/Math.max(du+dd,.0001),-1,1)}
+
+  const parts={
+    flow:{name:'FLOW',score:flow,w:.27},
+    accel:{name:'ACCEL',score:accel,w:.20},
+    response:{name:'PRICE',score:priceResponse,w:.16},
+    absorption:{name:'ABSORB',score:absorption,w:.14},
+    oi:{name:'OI',score:oi,w:.10},
+    liquidity:{name:'LIQUIDITY',score:liquidity,w:.08},
+    trend:{name:'TREND',score:trend,w:.04},
+    funding:{name:'FUNDING',score:fund,w:.01}
+  };
+  let raw=Object.values(parts).reduce((s,x)=>s+x.score*x.w,0);
+  // Always choose a side. Exact tie is resolved by freshest price response, then flow.
+  if(Math.abs(raw)<1e-9) raw=priceResponse||flow||0.000001;
+  const direction=raw>=0?'LONG':'SHORT';
+  const edge=clamp(Math.abs(raw),0,1);
+  // Force share: 50/50 means knife-edge; 100/0 means unanimous max-strength evidence.
+  const longForce=Math.round(50+raw*50), shortForce=100-longForce;
+  const dayHigh=Math.max(...h1.slice(-24)), dayLow=Math.min(...l1.slice(-24));
+  const threeDayHigh=Math.max(...h1.slice(-72)), threeDayLow=Math.min(...l1.slice(-72));
+  const range24=dayHigh-dayLow;
+  const levels={...lv,res4:lv4.res,sup4:lv4.sup,dayHigh,dayLow,threeDayHigh,threeDayLow,range24};
+  return {price,A,direction,edge,longForce,shortForce,parts,levels,oiChange,funding,flow,accel,priceResponse,absorption};
+}
+
+async function fetchJSON(url){const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw Error(r.status);return r.json()}
+async function fetchLiveData(){
+  try{
+    const base='https://fapi.binance.com';
+    const [k15,k1,k4,oi,prem]=await Promise.all([
+      fetchJSON(base+'/fapi/v1/klines?symbol=ETHUSDT&interval=15m&limit=96'),
+      fetchJSON(base+'/fapi/v1/klines?symbol=ETHUSDT&interval=1h&limit=200'),
+      fetchJSON(base+'/fapi/v1/klines?symbol=ETHUSDT&interval=4h&limit=100'),
+      fetchJSON(base+'/fapi/v1/openInterest?symbol=ETHUSDT'),
+      fetchJSON(base+'/fapi/v1/premiumIndex?symbol=ETHUSDT')
+    ]);
+    state=calcEngine(k15,k1,k4,+oi.openInterest,+prem.lastFundingRate);
+    priceDisplay.textContent=state.price.toFixed(2);
+    pressureInput.value=state.longForce; pressureInput.disabled=false;
+    pressureLabel.textContent=`LONG ${state.longForce} / SHORT ${state.shortForce}`;
+    liveDot.className='live-dot on'; liveStatus.textContent='Live · Binance Futures ETH';
+    liveTime.textContent=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    scanBtn.disabled=false; scanBtn.textContent='Сканировать → LONG / SHORT + TARGET';
+    return true;
+  }catch(e){liveDot.className='live-dot off';liveStatus.textContent='Нет связи с Binance Futures';scanBtn.disabled=true;scanBtn.textContent='Нет данных';return false}
+}
+
+function clusterTargets(vals,t=.0035){
+  const a=vals.filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length)return[];
+  const groups=[[a[0]]];
+  for(let i=1;i<a.length;i++){const g=groups.at(-1),m=avg(g);Math.abs(a[i]-m)/m<=t?g.push(a[i]):groups.push([a[i]])}
+  return groups.map(g=>({price:avg(g),hits:g.length}));
+}
+function targetSet(s){
+  const p=s.price,A=s.A,L=s.levels,dir=s.direction,sign=dir==='LONG'?1:-1;
+  const structural=dir==='LONG'
+    ? [...L.res.slice(0,6),...L.res4.slice(0,6),L.dayHigh,L.threeDayHigh]
+    : [...L.sup.slice(0,6),...L.sup4.slice(0,6),L.dayLow,L.threeDayLow];
+  const range=Math.max(L.range24,A*2.5);
+  const projected=[p+sign*range*.45,p+sign*range*.75,p+sign*range, p+sign*A*2.2,p+sign*A*3.5,p+sign*A*5.0];
+  const valid=x=>dir==='LONG'?x>p:x<p;
+  let candidates=clusterTargets([...structural,...projected].filter(valid));
+  candidates=candidates.map(x=>{
+    const dist=Math.abs(x.price-p)/A;
+    const mediumBonus=(dist>=1.5&&dist<=5.5)?2:0;
+    const structHits=structural.filter(v=>Number.isFinite(v)&&Math.abs(v-x.price)/x.price<.004).length;
+    return {...x,score:x.hits+structHits*1.5+mediumBonus,dist};
+  }).filter(x=>x.dist>.65 && x.dist<7.5);
+  candidates.sort((a,b)=>b.score-a.score || Math.abs(a.dist-3)-Math.abs(b.dist-3));
+  let main=candidates[0]?.price ?? p+sign*A*3.0;
+  const ordered=[...candidates].sort((a,b)=>Math.abs(a.price-p)-Math.abs(b.price-p));
+  let local=ordered.find(x=>Math.abs(x.price-p)<Math.abs(main-p)*.8)?.price ?? p+sign*Math.min(A*1.2,Math.abs(main-p)*.55);
+  let extended=ordered.find(x=>Math.abs(x.price-p)>Math.abs(main-p)*1.18)?.price ?? p+sign*Math.max(A*4.8,Math.abs(main-p)*1.45);
+
+  const opp=dir==='LONG'?[...L.sup,...L.sup4]:[...L.res,...L.res4];
+  let sl=opp.find(v=>Math.abs(v-p)>=A*.75 && Math.abs(v-p)<=A*2.8);
+  if(sl==null)sl=p-sign*A*1.15; else sl*=dir==='LONG'?.998:1.002;
+
+  // Entry zone: direction remains LONG/SHORT; timing only refines price.
+  const pull=A*(.18+.30*(1-s.edge));
+  const e1=isFinite(p-sign*pull)?p-sign*pull:p, e2=p+sign*A*.08;
+  const entryLo=Math.min(e1,e2), entryHi=Math.max(e1,e2);
+  const mainDist=Math.abs(main-p)/p;
+  let horizon=mainDist<.012?'6–12ч':mainDist<.025?'8–24ч':'12–36ч';
+  return {tp:[local,main,extended],sl,entryLo,entryHi,horizon,mainScore:candidates[0]?.score??0};
+}
+function label(score){if(score>.12)return 'LONG';if(score<-.12)return 'SHORT';return score>=0?'LONG слаб.':'SHORT слаб.'}
+function runScan(){
+  if(!state)return; const s=state, isLong=s.direction==='LONG', t=targetSet(s);
+  signalCard.className='signal-card '+(isLong?'long':'short'); sigWord.textContent=s.direction;
+  const winner=isLong?s.longForce:s.shortForce;
+  confPill.textContent='FORCE '+winner+'%'; entryPrice.textContent=`${fmt(t.entryLo)} – ${fmt(t.entryHi)}`; $('entryNote').textContent=`Горизонт основной цели: ${t.horizon}`;
+  $('tp1').textContent=fmt(t.tp[0]);$('tp2').textContent=fmt(t.tp[1]);$('tp3').textContent=fmt(t.tp[2]);$('sl').textContent=fmt(t.sl);
+  const dominant=Object.values(s.parts).sort((a,b)=>Math.abs(b.score*b.w)-Math.abs(a.score*a.w)).slice(0,3);
+  verdictText.textContent=`${s.direction} сильнее. MAIN TARGET ${fmt(t.tp[1])} · горизонт ${t.horizon}. ${dominant.map(x=>x.name+' '+label(x.score)).join(' · ')}.`;
+  const leadRow=$('leadRow'); leadRow.innerHTML='';
+  const show=['flow','accel','response','absorption','oi','liquidity'];
+  show.forEach(key=>{const x=s.parts[key],d=x.score>=0?'long':'short',chip=document.createElement('div');chip.className='lead-chip '+d;chip.innerHTML=`<div class="lead-name">${x.name}</div><div class="lead-val">${label(x.score)}</div>`;leadRow.appendChild(chip)});
+  result.classList.add('show');
+}
+scanBtn.addEventListener('click',runScan);
+fetchLiveData(); setInterval(fetchLiveData,20000);
+
+/* PWA install */
+let deferredPrompt=null;const installHint=$('installHint'),installBtn=$('installBtn'),installText=$('installText');
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;installHint.classList.add('show')});
+installBtn.addEventListener('click',async()=>{if(!deferredPrompt)return;deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;installHint.classList.remove('show')});
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent),isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
+if(isIOS&&!isStandalone){installText.textContent='Установи: "Поделиться" → "На экран Домой" 📲';installBtn.style.display='none';installHint.classList.add('show')}
+if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
